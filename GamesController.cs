@@ -85,29 +85,18 @@ public class GamesController : ControllerBase
         var query = queryParams != null ? "?" + string.Join("&", queryParams.Select(kv => $"{WebUtility.UrlEncode(kv.Key)}={WebUtility.UrlEncode(kv.Value)}")) : string.Empty;
         var url = baseUrl + query;
 
-        var originalRequestHeaders = Request.Headers;
         var content = new StringContent(""); // Games requests have null body
-        foreach (var header in originalRequestHeaders)
-        {
-            if (!content.Headers.Contains(header.Key))
-            {
-                content.Headers.Add(header.Key, header.Value.ToArray());
-            }
-        }
 
         var httpRequestMessage = new HttpRequestMessage(method, url)
         {
-            Content = content
-        };
-
-        foreach (var header in originalRequestHeaders)
-        {
-            if (!httpRequestMessage.Headers.Contains(header.Key))
+            Content = content,
+            Headers =
             {
-                httpRequestMessage.Headers.Add(header.Key, header.Value.ToArray());
+                { "Authorization", Request.Headers["Authorization"].ToArray() },
+                { "X-Forwarded-For", Request.Headers["X-Forwarded-For"].ToArray()}
             }
-        }
-
+        };
+        _logger.LogInformation(httpRequestMessage.ToString());
         var response = await _httpClient.SendAsync(httpRequestMessage);
         var responseBody = await response.Content.ReadAsStringAsync();
 
@@ -130,8 +119,13 @@ public class GamesController : ControllerBase
         { "lang", lang.ToString() },
         { "numImpostors", numImpostors.ToString() }
     };
-        var (statusCode, responseContent) = await ForwardRequest(port, HttpMethod.Get, queryParams); // Assuming port 8080 for example
-        return StatusCode(statusCode, new { Message = $"Forwarded Get to {port}.", ResponseContent = responseContent });
+        var (statusCode, responseContent) = await ForwardRequest(port, HttpMethod.Get, queryParams);
+
+        // 反序列化 JSON 字符串为对象
+        var responseObject = JsonSerializer.Deserialize<object>(responseContent);
+
+        // 将对象作为 JSON 返回
+        return StatusCode(statusCode, responseObject);
     }
 
     [HttpPut]
@@ -146,7 +140,11 @@ public class GamesController : ControllerBase
         }
 
         var (statusCode, responseContent) = await ForwardRequest(port, HttpMethod.Put, null); // Assuming port 8080 for example
-        return StatusCode(statusCode, new { Message = $"Forwarded Put to {port}.", ResponseContent = responseContent });
+        // 反序列化 JSON 字符串为对象
+        var responseObject = JsonSerializer.Deserialize<object>(responseContent);
+
+        // 将对象作为 JSON 返回
+        return StatusCode(statusCode, responseObject);
     }
 
     [HttpPost]
@@ -164,7 +162,11 @@ public class GamesController : ControllerBase
         { "gameId", gameId.ToString() }
     };
         var (statusCode, responseContent) = await ForwardRequest(port, HttpMethod.Post, queryParams); // Assuming port 8080 for example
-        return StatusCode(statusCode, new { Message = $"Forwarded Post to {port}.", ResponseContent = responseContent });
+        // 反序列化 JSON 字符串为对象
+        var responseObject = JsonSerializer.Deserialize<object>(responseContent);
+
+        // 将对象作为 JSON 返回
+        return StatusCode(statusCode, responseObject);
     }
 
     public enum GameKeywords : uint

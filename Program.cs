@@ -1,6 +1,5 @@
 using System.Text;
 using Impostor_Router;
-using static Impostor_Router.TokenController;
 
 // 设置控制台输出为 UTF-8
 Console.OutputEncoding = Encoding.UTF8;
