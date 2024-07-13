@@ -79,7 +79,7 @@ public class GamesController : ControllerBase
         return 404;
     }
 
-    private async Task<(int StatusCode, string ResponseContent)> ForwardRequest(int port, HttpMethod method, Dictionary<string, string>? queryParams = null)
+    private async Task<(int StatusCode, string ResponseContent, bool reactorExists)> ForwardRequest(int port, HttpMethod method, Dictionary<string, string>? queryParams = null)
     {
         var baseUrl = $"http://localhost:{port}/api/games";
         var query = queryParams != null ? "?" + string.Join("&", queryParams.Select(kv => $"{WebUtility.UrlEncode(kv.Key)}={WebUtility.UrlEncode(kv.Value)}")) : string.Empty;
@@ -89,18 +89,25 @@ public class GamesController : ControllerBase
 
         var httpRequestMessage = new HttpRequestMessage(method, url)
         {
-            Content = content,
-            Headers =
-            {
-                { "Authorization", Request.Headers["Authorization"].ToArray() },
-                { "X-Forwarded-For", Request.Headers["X-Forwarded-For"].ToArray()}
-            }
+            Content = content
         };
+        if (Request.Headers.ContainsKey("Authorization"))
+        {
+            httpRequestMessage.Headers.Add("Authorization", Request.Headers["Authorization"].ToArray());
+        }
+        if (Request.Headers.ContainsKey("X-Forwarded-For"))
+        {
+            httpRequestMessage.Headers.Add("X-Forwarded-For", Request.Headers["X-Forwarded-For"].ToArray());
+        }
+        // Reactor HandShake
+        if (Request.Headers.ContainsKey("Client-Mods"))
+        {
+            httpRequestMessage.Headers.Add("Client-Mods", Request.Headers["Client-Mods"].ToArray());
+        }
         _logger.LogInformation(httpRequestMessage.ToString());
         var response = await _httpClient.SendAsync(httpRequestMessage);
         var responseBody = await response.Content.ReadAsStringAsync();
-
-        return ((int)response.StatusCode, responseBody);
+        return ((int)response.StatusCode, responseBody, response.Headers.Contains("Client-Mods-Processed"));
     }
 
     [HttpGet]
@@ -119,13 +126,24 @@ public class GamesController : ControllerBase
         { "lang", lang.ToString() },
         { "numImpostors", numImpostors.ToString() }
     };
-        var (statusCode, responseContent) = await ForwardRequest(port, HttpMethod.Get, queryParams);
+        var (statusCode, responseContent, reactor) = await ForwardRequest(port, HttpMethod.Get, queryParams);
 
-        // 反序列化 JSON 字符串为对象
         var responseObject = JsonSerializer.Deserialize<object>(responseContent);
 
-        // 将对象作为 JSON 返回
-        return StatusCode(statusCode, responseObject);
+        // 使用ContentResult来设置返回内容和ContentType
+        var contentResult = new ContentResult
+        {
+            Content = JsonSerializer.Serialize(responseObject),
+            ContentType = "application/json",
+            StatusCode = statusCode
+        };
+
+        // If reactor is true, add the "Client-Mods-Processed" header
+        if (reactor)
+        {
+            HttpContext.Response.Headers.TryAdd("Client-Mods-Processed", "yes");
+        }
+        return contentResult;
     }
 
     [HttpPut]
@@ -139,12 +157,23 @@ public class GamesController : ControllerBase
             return BadRequest(new { Errors = new[] { new { Reason = 5 } } });
         }
 
-        var (statusCode, responseContent) = await ForwardRequest(port, HttpMethod.Put, null); // Assuming port 8080 for example
-        // 反序列化 JSON 字符串为对象
+        var (statusCode, responseContent, reactor) = await ForwardRequest(port, HttpMethod.Put, null); // Assuming port 8080 for example
         var responseObject = JsonSerializer.Deserialize<object>(responseContent);
 
-        // 将对象作为 JSON 返回
-        return StatusCode(statusCode, responseObject);
+        // 使用ContentResult来设置返回内容和ContentType
+        var contentResult = new ContentResult
+        {
+            Content = JsonSerializer.Serialize(responseObject),
+            ContentType = "application/json",
+            StatusCode = statusCode
+        };
+
+        // If reactor is true, add the "Client-Mods-Processed" header
+        if (reactor)
+        {
+            HttpContext.Response.Headers.TryAdd("Client-Mods-Processed", "yes");
+        }
+        return contentResult;
     }
 
     [HttpPost]
@@ -161,12 +190,23 @@ public class GamesController : ControllerBase
     {
         { "gameId", gameId.ToString() }
     };
-        var (statusCode, responseContent) = await ForwardRequest(port, HttpMethod.Post, queryParams); // Assuming port 8080 for example
-        // 反序列化 JSON 字符串为对象
+        var (statusCode, responseContent, reactor) = await ForwardRequest(port, HttpMethod.Post, queryParams); // Assuming port 8080 for example
         var responseObject = JsonSerializer.Deserialize<object>(responseContent);
 
-        // 将对象作为 JSON 返回
-        return StatusCode(statusCode, responseObject);
+        // 使用ContentResult来设置返回内容和ContentType
+        var contentResult = new ContentResult
+        {
+            Content = JsonSerializer.Serialize(responseObject),
+            ContentType = "application/json",
+            StatusCode = statusCode
+        };
+
+        // If reactor is true, add the "Client-Mods-Processed" header
+        if (reactor)
+        {
+            HttpContext.Response.Headers.TryAdd("Client-Mods-Processed", "yes");
+        }
+        return contentResult;
     }
 
     public enum GameKeywords : uint
